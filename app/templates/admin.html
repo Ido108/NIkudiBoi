@@ -1,0 +1,176 @@
+<!DOCTYPE html>
+<html lang="he" dir="rtl">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>Nikudiboi Admin</title>
+    <script src="https://cdn.tailwindcss.com"></script>
+    <link href="https://fonts.googleapis.com/css2?family=Heebo:wght@300;400;500;700&display=swap" rel="stylesheet">
+</head>
+<body class="bg-gray-50 font-['Heebo'] text-gray-800">
+    
+    <div class="max-w-4xl mx-auto py-10 px-6">
+        <div class="flex justify-between items-center mb-8">
+            <h1 class="text-3xl font-bold text-indigo-600">ניהול מערכת Nikudiboi</h1>
+            <a href="/" target="_blank" class="text-sm text-gray-500 hover:text-indigo-600">צפה באתר &rarr;</a>
+        </div>
+
+        <!-- Config Form -->
+        <div class="bg-white rounded-2xl shadow-sm border border-gray-100 p-8 mb-8">
+            <h2 class="text-xl font-semibold mb-6 border-b pb-2">הגדרות אתר</h2>
+            <form id="configForm" class="space-y-6">
+                <div class="grid grid-cols-1 md:grid-cols-2 gap-6">
+                    <div>
+                        <label class="block text-sm font-medium text-gray-700 mb-1">כותרת ראשית</label>
+                        <input type="text" name="site_title" value="{{ config.site_title }}" class="w-full p-2 border rounded-lg focus:ring-2 focus:ring-indigo-500">
+                    </div>
+                    <div>
+                        <label class="block text-sm font-medium text-gray-700 mb-1">תת כותרת</label>
+                        <input type="text" name="subtitle" value="{{ config.subtitle }}" class="w-full p-2 border rounded-lg focus:ring-2 focus:ring-indigo-500">
+                    </div>
+                    <div>
+                        <label class="block text-sm font-medium text-gray-700 mb-1">צבע ראשי (Hex)</label>
+                        <div class="flex gap-2">
+                            <input type="color" id="colorPicker" value="{{ config.primary_color }}" class="h-10 w-10 rounded border p-1 cursor-pointer">
+                            <input type="text" name="primary_color" id="colorInput" value="{{ config.primary_color }}" class="flex-1 p-2 border rounded-lg uppercase">
+                        </div>
+                    </div>
+                    <div>
+                         <label class="block text-sm font-medium text-gray-700 mb-1">הודעת פתיחה (Placeholder)</label>
+                         <input type="text" name="welcome_message" value="{{ config.welcome_message }}" class="w-full p-2 border rounded-lg">
+                    </div>
+                </div>
+
+                <div class="pt-4 border-t">
+                    <label class="block text-sm font-medium text-gray-700 mb-2">מודל פעיל</label>
+                    <select name="active_model" class="w-full p-2 border rounded-lg bg-gray-50">
+                        {% for model in models %}
+                        <option value="{{ model }}" {% if model == config.active_model %}selected{% endif %}>{{ model }}</option>
+                        {% endfor %}
+                    </select>
+                    <p class="text-xs text-gray-500 mt-1">שינוי מודל יגרום לטעינה מחדש (עלול לקחת מספר שניות).</p>
+                </div>
+
+                <button type="submit" class="w-full bg-indigo-600 text-white py-2 px-4 rounded-lg hover:bg-indigo-700 font-medium transition shadow-lg shadow-indigo-200">שמור שינויים</button>
+            </form>
+        </div>
+
+        <!-- Model Management -->
+        <div class="bg-white rounded-2xl shadow-sm border border-gray-100 p-8">
+            <h2 class="text-xl font-semibold mb-6 border-b pb-2">ניהול מודלים</h2>
+            
+            <!-- Upload -->
+            <div class="mb-8">
+                <label class="block text-sm font-medium text-gray-700 mb-2">העלאת מודל חדש (.pth)</label>
+                <div class="flex gap-4">
+                    <input type="file" id="modelFile" accept=".pth" class="block w-full text-sm text-gray-500 file:mr-4 file:py-2 file:px-4 file:rounded-full file:border-0 file:text-sm file:font-semibold file:bg-indigo-50 file:text-indigo-700 hover:file:bg-indigo-100"/>
+                    <button onclick="uploadModel()" class="bg-green-600 text-white px-4 py-2 rounded-lg hover:bg-green-700 whitespace-nowrap">העלה</button>
+                </div>
+                <div id="uploadStatus" class="mt-2 text-sm font-medium"></div>
+            </div>
+
+            <!-- List -->
+            <h3 class="text-sm font-medium text-gray-700 mb-3">קבצים קיימים:</h3>
+            <ul class="divide-y divide-gray-100 bg-gray-50 rounded-lg border">
+                {% for model in models %}
+                <li class="flex justify-between items-center p-3 hover:bg-white transition">
+                    <span class="text-sm font-mono text-gray-600">{{ model }}</span>
+                    <div class="flex items-center gap-4">
+                        {% if model == config.active_model %}
+                        <span class="text-xs bg-green-100 text-green-800 px-2 py-1 rounded-full font-bold">פעיל</span>
+                        {% else %}
+                        <button onclick="deleteModel('{{ model }}')" class="text-red-500 hover:text-red-700 text-sm">מחק</button>
+                        {% endif %}
+                    </div>
+                </li>
+                {% endfor %}
+            </ul>
+        </div>
+    </div>
+
+    <script>
+        // Color Sync
+        const colorPicker = document.getElementById('colorPicker');
+        const colorInput = document.getElementById('colorInput');
+        colorPicker.addEventListener('input', (e) => colorInput.value = e.target.value);
+        colorInput.addEventListener('input', (e) => colorPicker.value = e.target.value);
+
+        // Save Config
+        document.getElementById('configForm').addEventListener('submit', async (e) => {
+            e.preventDefault();
+            const formData = new FormData(e.target);
+            const json = Object.fromEntries(formData.entries());
+            
+            const btn = e.target.querySelector('button[type="submit"]');
+            const originalText = btn.innerText;
+            btn.innerText = 'שומר...';
+            btn.disabled = true;
+
+            try {
+                const res = await fetch('/api/config', {
+                    method: 'POST',
+                    headers: {'Content-Type': 'application/json'},
+                    body: JSON.stringify(json)
+                });
+                if(res.ok) {
+                    alert('ההגדרות נשמרו בהצלחה!');
+                    location.reload(); 
+                } else {
+                    alert('שגיאה בשמירה');
+                }
+            } catch(err) {
+                console.error(err);
+                alert('שגיאת תקשורת');
+            } finally {
+                btn.innerText = originalText;
+                btn.disabled = false;
+            }
+        });
+
+        // Upload Model
+        async function uploadModel() {
+            const fileInput = document.getElementById('modelFile');
+            const status = document.getElementById('uploadStatus');
+            if(!fileInput.files[0]) return alert('בחר קובץ');
+
+            const formData = new FormData();
+            formData.append('file', fileInput.files[0]);
+
+            status.innerText = 'מעלה... (נא להמתין)';
+            status.className = 'mt-2 text-sm font-medium text-blue-600';
+
+            try {
+                const res = await fetch('/api/models/upload', {method: 'POST', body: formData});
+                if(res.ok) {
+                    status.innerText = 'הועלה בהצלחה!';
+                    status.className = 'mt-2 text-sm font-medium text-green-600';
+                    setTimeout(() => location.reload(), 1000);
+                } else {
+                    status.innerText = 'שגיאה בהעלאה';
+                    status.className = 'mt-2 text-sm font-medium text-red-600';
+                }
+            } catch(err) {
+                console.error(err);
+                status.innerText = 'שגיאת תקשורת';
+            }
+        }
+
+        // Delete Model
+        async function deleteModel(filename) {
+            if(!confirm('האם אתה בטוח שברצונך למחוק את הקובץ ' + filename + '?')) return;
+            
+            try {
+                const res = await fetch('/api/models/' + filename, {method: 'DELETE'});
+                if(res.ok) {
+                    location.reload();
+                } else {
+                    const data = await res.json();
+                    alert('שגיאה: ' + data.detail);
+                }
+            } catch(err) {
+                alert('תקלה במחיקה');
+            }
+        }
+    </script>
+</body>
+</html>
