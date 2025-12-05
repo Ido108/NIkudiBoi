@@ -29,7 +29,7 @@ from src.running_params import BATCH_SIZE, MAX_LENGTH_SEN
 
 # --- Constants ---
 MODELS_DIR = "models"
-CONFIG_FILE = "site_config.json"
+CONFIG_FILE = os.path.join(MODELS_DIR, "site_config.json")
 DEVICE = 'cuda' if torch.cuda.is_available() else 'cpu'
 
 # --- Logging ---
@@ -109,14 +109,23 @@ def reload_model():
 @asynccontextmanager
 async def lifespan(app: FastAPI):
     # Startup
+    
+    # 1. Ensure models dir exists (Critical for Volume mounting)
+    if not os.path.exists(MODELS_DIR):
+        try:
+            os.makedirs(MODELS_DIR)
+            logger.info(f"Created models directory at: {MODELS_DIR}")
+        except Exception as e:
+            logger.error(f"Failed to create models directory: {e}")
+
+    # 2. Load Config (Now safe to do)
     load_config()
     
-    # Ensure models dir exists
-    if not os.path.exists(MODELS_DIR):
-        os.makedirs(MODELS_DIR)
-        
+    # 3. Load Model
     reload_model()
+    
     yield
+    
     # Shutdown
     ml_models.clear()
 
