@@ -4,15 +4,17 @@ import logging
 import tempfile
 import json
 import shutil
+import secrets
 from contextlib import asynccontextmanager
 from typing import List, Optional
 
 import torch
-from fastapi import FastAPI, HTTPException, UploadFile, File, Form
+from fastapi import FastAPI, HTTPException, UploadFile, File, Form, Depends
 from fastapi.responses import HTMLResponse, JSONResponse
 from fastapi.staticfiles import StaticFiles
 from fastapi.templating import Jinja2Templates
 from fastapi.requests import Request
+from fastapi.security import HTTPBasic, HTTPBasicCredentials
 from pydantic import BaseModel
 from transformers import AutoTokenizer, AutoConfig
 
@@ -31,6 +33,24 @@ from src.running_params import BATCH_SIZE, MAX_LENGTH_SEN
 MODELS_DIR = "models"
 CONFIG_FILE = os.path.join(MODELS_DIR, "site_config.json")
 DEVICE = 'cuda' if torch.cuda.is_available() else 'cpu'
+
+# --- Security ---
+security = HTTPBasic()
+ADMIN_USER = os.getenv("ADMIN_USER", "admin")
+ADMIN_PASSWORD = os.getenv("ADMIN_PASSWORD", "nikud123")
+
+def verify_admin(credentials: HTTPBasicCredentials = Depends(security)):
+    """Enforce HTTP Basic Auth"""
+    is_user_ok = secrets.compare_digest(credentials.username, ADMIN_USER)
+    is_pass_ok = secrets.compare_digest(credentials.password, ADMIN_PASSWORD)
+    
+    if not (is_user_ok and is_pass_ok):
+        raise HTTPException(
+            status_code=401,
+            detail="Unauthorized",
+            headers={"WWW-Authenticate": "Basic"},
+        )
+    return True
 
 # --- Logging ---
 logging.basicConfig(level=logging.INFO)
@@ -154,7 +174,7 @@ async def read_root(request: Request):
         "config": app_config
     })
 
-@app.get("/admin", response_class=HTMLResponse)
+@app.get("/admin", response_class=HTMLResponse, dependencies=[Depends(verify_admin)])
 async def admin_panel(request: Request):
     # List models
     models = []
@@ -167,7 +187,7 @@ async def admin_panel(request: Request):
         "models": models
     })
 
-@app.post("/api/config")
+@app.post("/api/config", dependencies=[Depends(verify_admin)])
 async def update_config(config: SiteConfig):
     global app_config
     old_model = app_config.get("active_model")
@@ -182,7 +202,7 @@ async def update_config(config: SiteConfig):
             
     return {"status": "success", "config": app_config}
 
-@app.post("/api/models/upload")
+@app.post("/api/models/upload", dependencies=[Depends(verify_admin)])
 async def upload_model(file: UploadFile = File(...)):
     if not file.filename.endswith('.pth'):
         raise HTTPException(400, "Only .pth files are allowed")
@@ -196,7 +216,7 @@ async def upload_model(file: UploadFile = File(...)):
         
     return {"filename": file.filename, "status": "uploaded"}
 
-@app.delete("/api/models/{filename}")
+@app.delete("/api/models/{filename}", dependencies=[Depends(verify_admin)])
 async def delete_model(filename: str):
     file_path = os.path.join(MODELS_DIR, filename)
     
