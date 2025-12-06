@@ -104,14 +104,6 @@
                 </label>
             </div>
 
-             <!-- Options -->
-             <div class="glass-panel rounded-2xl p-4 flex flex-col gap-2">
-                 <div class="flex items-center justify-between group p-2 rounded-xl hover:bg-white/40 cursor-pointer" onclick="document.getElementById('compare_checkbox').click()">
-                    <span class="text-sm font-semibold text-slate-700">התאמה לנקדימון</span>
-                    <input type="checkbox" id="compare_checkbox" class="w-5 h-5 text-primary rounded focus:ring-primary border-gray-300">
-                </div>
-            </div>
-
             <!-- Action Button -->
             <button id="process_btn" class="group relative w-full py-4 primary-btn hover:brightness-110 text-white rounded-2xl shadow-lg transition-all transform hover:-translate-y-1 overflow-hidden">
                 <div class="relative flex items-center justify-center gap-2 font-bold text-lg">
@@ -166,7 +158,6 @@
         const btnIcon = document.getElementById('btn_icon');
         const loadingSpinner = document.getElementById('loading_spinner');
         const emptyState = document.getElementById('empty_state');
-        const compareCheckbox = document.getElementById('compare_checkbox');
 
         // File Upload
         document.getElementById('dropzone-file').addEventListener('change', (e) => {
@@ -197,8 +188,7 @@
                     method: 'POST',
                     headers: { 'Content-Type': 'application/json' },
                     body: JSON.stringify({ 
-                        text: text, 
-                        compare_nakdimon: compareCheckbox.checked 
+                        text: text
                     }),
                 });
                 const data = await response.json();

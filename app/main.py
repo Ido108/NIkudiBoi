@@ -115,7 +115,11 @@ def reload_model():
         
         # 3. Load Weights
         state_dict = torch.load(model_path, map_location=DEVICE)
-        model.load_state_dict(state_dict)
+        load_result = model.load_state_dict(state_dict, strict=False)
+        if load_result.missing_keys:
+            logger.warning(f"Missing keys when loading model: {load_result.missing_keys}")
+        if load_result.unexpected_keys:
+            logger.warning(f"Unexpected keys when loading model: {load_result.unexpected_keys}")
         model.eval()
         
         ml_models["model"] = model
