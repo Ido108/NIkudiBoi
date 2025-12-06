@@ -268,6 +268,8 @@ async def predict_text(request: PredictRequest):
         raise HTTPException(status_code=400, detail="No text provided")
     
     proxy_url = (GPU_PROXY_URL_ENV or "").strip() or (app_config.get("gpu_proxy_url") or "").strip()
+    if proxy_url and not proxy_url.lower().startswith(("http://", "https://")):
+        proxy_url = f"http://{proxy_url}"
     use_proxy = bool(app_config.get("use_gpu_proxy")) and proxy_url
 
     # If configured, proxy to external/local GPU server
