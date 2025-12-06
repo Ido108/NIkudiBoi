@@ -198,11 +198,27 @@ async def admin_panel(request: Request):
     models = []
     if os.path.exists(MODELS_DIR):
         models = [f for f in os.listdir(MODELS_DIR) if f.endswith('.pth')]
+
+    remote_models = []
+    proxy_url = (app_config.get("gpu_proxy_url") or "").strip()
+    using_proxy = bool(app_config.get("use_gpu_proxy")) and proxy_url
+    if using_proxy:
+        try:
+            resp = requests.get(f"{proxy_url.rstrip('/')}/api/nikud-models", timeout=10)
+            if resp.ok:
+                data = resp.json()
+                remote_models = data.get("models", [])
+            else:
+                logger.warning(f"GPU proxy list failed: {resp.status_code} {resp.text}")
+        except Exception as e:
+            logger.warning(f"GPU proxy list error: {e}")
     
     return templates.TemplateResponse("admin.html", {
         "request": request,
         "config": app_config,
-        "models": models
+        "models": models,
+        "remote_models": remote_models,
+        "using_proxy": using_proxy
     })
 
 @app.post("/api/config", dependencies=[Depends(verify_admin)])
@@ -259,7 +275,7 @@ async def predict_text(request: PredictRequest):
         try:
             proxy_resp = requests.post(
                 f"{proxy_url.rstrip('/')}/api/predict",
-                json={"text": request.text},
+                json={"text": request.text, "model": app_config.get("active_model")},
                 timeout=120,
             )
             if proxy_resp.status_code != 200:
