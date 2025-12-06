@@ -11,6 +11,12 @@ This folder contains the production-ready deployment version of D-Nikud (rebrand
    - **Main Interface:** http://127.0.0.1:8000
    - **Admin Panel:** http://127.0.0.1:8000/admin
 
+### GPU Proxy (optional)
+- ניתן להפנות אינפרנס לשרת GPU חיצוני (למשל מחשב עם 4090):
+  - הפעל אותו על `http://<IP>:4000` עם הנתיב `/api/predict`.
+  - הצב משתנה סביבה `GPU_PROXY_URL=http://<IP>:4000` או בחר "GPU חיצוני" בלוח הניהול והזן כתובת.
+  - אם ה-GPU לא זמין, המערכת תנסה להריץ מקומית על CPU.
+
 ## 🐳 Deployment (Docker)
 
 This folder includes a `Dockerfile` optimized for deployment on any container platform (Google Cloud Run, AWS ECS, DigitalOcean App Platform, etc.).

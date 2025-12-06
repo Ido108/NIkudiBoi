@@ -1,6 +1,7 @@
 import os
 import sys
 import logging
+import time
 import tempfile
 import json
 import shutil
@@ -9,6 +10,7 @@ from contextlib import asynccontextmanager
 from typing import List, Optional
 
 import torch
+import requests
 from fastapi import FastAPI, HTTPException, UploadFile, File, Form, Depends
 from fastapi.responses import HTMLResponse, JSONResponse
 from fastapi.staticfiles import StaticFiles
@@ -33,6 +35,7 @@ from src.running_params import BATCH_SIZE, MAX_LENGTH_SEN
 MODELS_DIR = "models"
 CONFIG_FILE = os.path.join(MODELS_DIR, "site_config.json")
 DEVICE = 'cuda' if torch.cuda.is_available() else 'cpu'
+GPU_PROXY_URL_ENV = os.getenv("GPU_PROXY_URL", "").strip()
 
 # --- Security ---
 security = HTTPBasic()
@@ -62,7 +65,9 @@ DEFAULT_CONFIG = {
     "subtitle": "AI Powered Hebrew Diacritization",
     "primary_color": "#4f46e5",
     "welcome_message": "הדבק טקסט בעברית כאן...",
-    "active_model": "model.pth"
+    "active_model": "model.pth",
+    "use_gpu_proxy": False,
+    "gpu_proxy_url": GPU_PROXY_URL_ENV
 }
 
 # --- Global State ---
@@ -78,6 +83,13 @@ def load_config():
                 app_config.update(loaded)
         except Exception as e:
             logger.error(f"Error loading config: {e}")
+    # ensure new keys present
+    for k, v in DEFAULT_CONFIG.items():
+        if k not in app_config:
+            app_config[k] = v
+    # env override for proxy URL if provided
+    if GPU_PROXY_URL_ENV:
+        app_config["gpu_proxy_url"] = GPU_PROXY_URL_ENV
 
 def save_config():
     try:
@@ -168,6 +180,8 @@ class SiteConfig(BaseModel):
     primary_color: str
     welcome_message: str
     active_model: str
+    use_gpu_proxy: bool = False
+    gpu_proxy_url: Optional[str] = ""
 
 # --- Routes ---
 
@@ -237,10 +251,36 @@ async def predict_text(request: PredictRequest):
     if not request.text:
         raise HTTPException(status_code=400, detail="No text provided")
     
+    proxy_url = (GPU_PROXY_URL_ENV or "").strip() or (app_config.get("gpu_proxy_url") or "").strip()
+    use_proxy = bool(app_config.get("use_gpu_proxy")) and proxy_url
+
+    # If configured, proxy to external/local GPU server
+    if use_proxy:
+        try:
+            proxy_resp = requests.post(
+                f"{proxy_url.rstrip('/')}/api/predict",
+                json={"text": request.text},
+                timeout=120,
+            )
+            if proxy_resp.status_code != 200:
+                raise HTTPException(
+                    status_code=proxy_resp.status_code,
+                    detail=proxy_resp.text,
+                )
+            data = proxy_resp.json()
+            return {"result": data.get("result"), "proxied": True, "timing_ms": data.get("timing_ms")}
+        except HTTPException:
+            raise
+        except Exception as e:
+            logger.error(f"Proxy predict error: {e}")
+            # Fallback to local CPU if proxy fails
+            # (no raise here; continue to local path)
+
     if "model" not in ml_models:
         raise HTTPException(status_code=503, detail="Model is not loaded. Please configure a valid model in Admin.")
 
     try:
+        start_time = time.perf_counter()
         with tempfile.NamedTemporaryFile(mode='w+', encoding='utf-8', delete=False, suffix='.txt') as temp_file:
             temp_file.write(request.text)
             temp_file_path = temp_file.name
@@ -249,13 +289,16 @@ async def predict_text(request: PredictRequest):
             dataset = NikudDataset(ml_models["tokenizer"], file=temp_file_path, logger=logger, max_length=MAX_LENGTH_SEN)
             dataset.prepare_data(name="prediction")
             dl = torch.utils.data.DataLoader(dataset.prepered_data, batch_size=BATCH_SIZE)
+            prep_ms = int((time.perf_counter() - start_time) * 1000)
             all_labels = predict(ml_models["model"], dl, DEVICE)
             result_text = dataset.back_2_text(labels=all_labels)
+            infer_ms = int((time.perf_counter() - start_time) * 1000)
+            logger.info(f"Predict timing (ms) prep={prep_ms}, total={infer_ms}, text_len={len(request.text)}")
             
             if request.compare_nakdimon:
                 result_text = extract_text_to_compare_nakdimon(result_text)
 
-            return {"result": result_text}
+            return {"result": result_text, "timing_ms": infer_ms, "prep_ms": prep_ms}
         finally:
             if os.path.exists(temp_file_path):
                 os.remove(temp_file_path)

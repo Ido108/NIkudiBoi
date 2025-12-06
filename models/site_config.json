@@ -1,0 +1,9 @@
+{
+  "site_title": "Nikudiboi",
+  "subtitle": "AI Powered Hebrew Diacritization",
+  "primary_color": "#4f46e5",
+  "welcome_message": "הדבק טקסט בעברית כאן...",
+  "active_model": "model.pth",
+  "use_gpu_proxy": true,
+  "gpu_proxy_url": "http://109.67.128.225:4000"
+}
