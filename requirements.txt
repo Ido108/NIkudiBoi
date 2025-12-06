@@ -10,9 +10,13 @@ transformers
 numpy
 pandas
 tqdm
+PyYAML
 
 # Data Processing
 regex
 requests
 sentencepiece
 scikit-learn
+matplotlib
+seaborn
+glob2
